@@ -28,7 +28,7 @@ FREE_DAILY_LIMIT = 18
 FREE_MAX_FILE_MB = 2
 PLUS_MAX_FILE_MB = 25
 
-FREE_MODEL = "llama-3.1-8b-instant"
+FREE_MODEL = "gemma2-9b-it"
 PLUS_MODEL = "llama-3.3-70b-versatile"
 
 CODE_VALID_MINUTES = 10
