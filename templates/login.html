@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nova — Giriş</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#121317; --panel:#1a1c22; --border:#2b2e37;
+    --text:#ECE9E2; --muted:#8d909c; --accent:#cba36b; --accent-soft:rgba(203,163,107,0.14);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%, rgba(203,163,107,0.08), transparent 60%), var(--bg);
+    font-family:'Manrope', sans-serif; color:var(--text);
+  }
+  .card{
+    width:100%; max-width:380px; padding:36px 32px;
+    background:var(--panel); border:1px solid var(--border); border-radius:18px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:10px; }
+  .nova-mark{
+    width:9px; height:9px; border-radius:50%; background:var(--accent);
+    animation:pulse 2.6s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(203,163,107,0.45);}
+    70%{box-shadow:0 0 0 10px rgba(203,163,107,0);}
+    100%{box-shadow:0 0 0 0 rgba(203,163,107,0);}
+  }
+  h1{ font-family:'Fraunces', serif; font-weight:500; font-size:20px; margin:0; }
+  .subtitle{ text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 26px; }
+  label{ font-size:13px; color:var(--muted); display:block; margin-bottom:6px; }
+  input{
+    width:100%; padding:12px 14px; margin-bottom:18px;
+    background:#20222a; border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:'Manrope', sans-serif; font-size:14.5px; outline:none;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  button{
+    width:100%; padding:13px; border:none; border-radius:10px;
+    background:var(--accent); color:#1a1509; font-weight:700; font-size:15px;
+    cursor:pointer; transition:filter .15s;
+  }
+  button:hover{ filter:brightness(1.08); }
+  .flash{
+    background:rgba(203,107,107,0.12); border:1px solid rgba(203,107,107,0.4);
+    color:#e0a3a3; padding:10px 14px; border-radius:10px; font-size:13.5px; margin-bottom:16px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="nova-mark"></div>
+      <h1>Nova</h1>
+    </div>
+    <p class="subtitle">Email-ini yaz, sənə giriş kodu göndərək</p>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for m in messages %}
+          <div class="flash">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+      <label>Email</label>
+      <input type="email" name="email" required placeholder="sen@nümunə.com" autofocus>
+      <button type="submit">Kod göndər</button>
+    </form>
+  </div>
+</body>
+</html>
