@@ -28,8 +28,8 @@ FREE_DAILY_LIMIT = 18
 FREE_MAX_FILE_MB = 2
 PLUS_MAX_FILE_MB = 25
 
-FREE_MODEL = "gemma2-9b-it"
-PLUS_MODEL = "llama-3.3-70b-versatile"
+FREE_MODEL = "openai/gpt-oss-20b"
+PLUS_MODEL = "openai/gpt-oss-120b"
 
 CODE_VALID_MINUTES = 10
 
