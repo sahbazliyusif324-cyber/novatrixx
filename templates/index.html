@@ -18,6 +18,8 @@
     --accent: #cba36b;
     --accent-soft: rgba(203,163,107,0.14);
     --user-bubble: #262933;
+    --incognito: #8a6fd8;
+    --incognito-soft: rgba(138,111,216,0.14);
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -29,17 +31,64 @@
     color:var(--text);
     font-family:'Manrope', sans-serif;
     display:flex;
-    flex-direction:column;
     min-height:100vh;
   }
+
+  #sidebar{
+    width:0; overflow:hidden; flex-shrink:0;
+    background:var(--panel); border-right:1px solid var(--border);
+    transition:width .22s ease;
+    display:flex; flex-direction:column;
+  }
+  #sidebar.open{ width:260px; }
+  .sidebar-inner{ width:260px; display:flex; flex-direction:column; height:100%; }
+  .sidebar-header{
+    padding:18px 16px 10px; font-family:'Fraunces', serif; font-size:14px;
+    color:var(--muted); letter-spacing:.03em;
+  }
+  .conv-list{ flex:1; overflow-y:auto; padding:4px 10px; }
+  .conv-item{
+    display:flex; align-items:center; gap:8px;
+    padding:10px 12px; border-radius:10px; cursor:pointer;
+    font-size:13.5px; color:var(--text); margin-bottom:2px;
+    transition:background .15s;
+  }
+  .conv-item:hover{ background:var(--panel-2); }
+  .conv-item.active{ background:var(--accent-soft); color:var(--accent); }
+  .conv-title{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .conv-delete{
+    opacity:0; flex-shrink:0; width:22px; height:22px; border-radius:6px;
+    border:none; background:transparent; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:opacity .12s, color .12s, background .12s;
+  }
+  .conv-item:hover .conv-delete{ opacity:1; }
+  .conv-delete:hover{ color:#e0a3a3; background:rgba(203,107,107,0.14); }
+  .conv-empty{ padding:14px 12px; font-size:12.5px; color:var(--muted); }
+
+  #mainCol{ flex:1; display:flex; flex-direction:column; min-width:0; }
 
   header{
     display:flex;
     align-items:center;
     justify-content:center;
+    position:relative;
     gap:12px;
     padding:28px 20px 20px;
   }
+  .icon-btn{
+    position:absolute; top:22px;
+    width:36px; height:36px; border-radius:10px; border:none;
+    background:transparent; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:color .15s, background .15s;
+  }
+  .icon-btn:hover{ color:var(--accent); background:var(--accent-soft); }
+  .icon-btn.active{ color:var(--incognito); background:var(--incognito-soft); }
+  #historyBtn{ left:20px; }
+  #newChatBtn{ right:64px; }
+  #incognitoBtn{ right:20px; }
+
   .nova-mark{
     position:relative;
     width:10px;
@@ -49,6 +98,7 @@
     box-shadow:0 0 0 0 rgba(203,163,107,0.6);
     animation:pulse 2.6s ease-in-out infinite;
   }
+  .nova-mark.incognito-on{ background:var(--incognito); }
   @keyframes pulse{
     0%{ box-shadow:0 0 0 0 rgba(203,163,107,0.45); }
     70%{ box-shadow:0 0 0 10px rgba(203,163,107,0); }
@@ -63,12 +113,29 @@
     color:var(--text);
   }
 
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    max-width:760px; margin:0 auto; padding:0 20px;
+  }
+  .badge{
+    font-size:12px; padding:5px 11px; border-radius:20px;
+    border:1px solid var(--border); color:var(--muted);
+  }
+  .badge.plus{ color:var(--accent); border-color:var(--accent); }
+  .badge.incognito{ color:var(--incognito); border-color:var(--incognito); }
+  .topbar-right{ display:flex; align-items:center; gap:10px; }
+  .logout-link{
+    font-size:13px; color:var(--muted); text-decoration:none; border:1px solid var(--border);
+    padding:6px 12px; border-radius:20px; transition:color .15s, border-color .15s;
+  }
+  .logout-link:hover{ color:var(--text); border-color:var(--accent); }
+
   main{
     flex:1;
     width:100%;
     max-width:760px;
     margin:0 auto;
-    padding:10px 20px 140px;
+    padding:10px 20px 160px;
     display:flex;
     flex-direction:column;
     gap:18px;
@@ -125,6 +192,10 @@
     color:var(--text);
     position:relative;
   }
+  .bubble img.msg-image{
+    display:block; max-width:100%; max-height:260px; border-radius:10px;
+    margin-bottom:8px; object-fit:cover;
+  }
   .nova-label{
     font-family:'Fraunces', serif;
     font-size:12px;
@@ -156,9 +227,27 @@
     bottom:0;
     left:0;
     right:0;
-    padding:18px 20px 26px;
+    padding:14px 20px 26px;
     background:linear-gradient(180deg, transparent, var(--bg) 40%);
   }
+
+  .preview-strip{
+    max-width:760px; margin:0 auto 8px; padding:0 6px;
+    display:none;
+  }
+  .preview-strip.show{ display:flex; }
+  .preview-chip{
+    position:relative; width:64px; height:64px; border-radius:10px;
+    overflow:hidden; border:1px solid var(--border);
+  }
+  .preview-chip img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .preview-remove{
+    position:absolute; top:2px; right:2px; width:18px; height:18px;
+    border-radius:50%; background:rgba(0,0,0,0.6); border:none; color:#fff;
+    font-size:12px; line-height:1; cursor:pointer; display:flex;
+    align-items:center; justify-content:center;
+  }
+
   .input-wrap{
     max-width:760px;
     margin:0 auto;
@@ -168,13 +257,20 @@
     background:var(--panel);
     border:1px solid var(--border);
     border-radius:16px;
-    padding:6px 6px 6px 18px;
+    padding:6px 6px 6px 6px;
     transition:border-color .2s, box-shadow .2s;
   }
   .input-wrap:focus-within{
     border-color:var(--accent);
     box-shadow:0 0 0 3px var(--accent-soft);
   }
+  .attach{
+    flex-shrink:0; width:36px; height:36px; border-radius:10px;
+    border:none; background:transparent; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:color .15s, background .15s; margin-left:6px;
+  }
+  .attach:hover{ color:var(--accent); background:var(--accent-soft); }
   textarea{
     flex:1;
     background:transparent;
@@ -208,16 +304,6 @@
   button.send:active{ transform:scale(0.94); }
   button.send:disabled{ opacity:0.4; cursor:default; }
 
-  ::-webkit-scrollbar{ width:8px; }
-  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:8px; }
-
-  .attach{
-    flex-shrink:0; width:36px; height:36px; border-radius:10px;
-    border:none; background:transparent; color:var(--muted); cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-    transition:color .15s, background .15s;
-  }
-  .attach:hover{ color:var(--accent); background:var(--accent-soft); }
   .file-note{
     max-width:760px; margin:8px auto 0; padding:0 6px;
     font-size:12.5px; color:var(--muted); text-align:center; min-height:16px;
@@ -225,72 +311,105 @@
   .file-note.error{ color:#e0a3a3; }
   .file-note.ok{ color:var(--accent); }
 
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between;
-    max-width:760px; margin:0 auto; padding:0 20px;
-  }
-  .badge{
-    font-size:12px; padding:5px 11px; border-radius:20px;
-    border:1px solid var(--border); color:var(--muted);
-  }
-  .badge.plus{ color:var(--accent); border-color:var(--accent); }
-  .topbar-right{ display:flex; align-items:center; gap:10px; }
-  .logout-link{
-    font-size:13px; color:var(--muted); text-decoration:none; border:1px solid var(--border);
-    padding:6px 12px; border-radius:20px; transition:color .15s, border-color .15s;
-  }
-  .logout-link:hover{ color:var(--text); border-color:var(--accent); }
-  .limit-banner{
-    max-width:760px; margin:14px auto 0; padding:12px 16px;
-    background:rgba(203,163,107,0.08); border:1px solid var(--accent-soft);
-    border-radius:12px; font-size:13px; color:var(--muted); text-align:center;
-  }
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:8px; }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="nova-mark"></div>
-  <h1>Nova</h1>
-</header>
-
-<div class="topbar">
-  <span class="badge {{ 'plus' if plan == 'plus' else '' }}">{{ 'Nova+' if plan == 'plus' else 'Free' }}</span>
-  <div class="topbar-right">
-    <a class="logout-link" href="/logout">Çıxış</a>
+<div id="sidebar">
+  <div class="sidebar-inner">
+    <div class="sidebar-header">Söhbətlər</div>
+    <div class="conv-list" id="convList">
+      <div class="conv-empty">Hələ söhbət yoxdur.</div>
+    </div>
   </div>
 </div>
 
-<main id="chat">
-  <div class="empty-state" id="emptyState">
-    <div class="big">Salam.</div>
-    <p>Nə barədə danışmaq istəyirsən? Nova sənin suallarına kömək etməyə hazırdır.</p>
-  </div>
-</main>
-
-<footer>
-  <div class="input-wrap">
-    <button class="attach" id="attachBtn" aria-label="Fayl əlavə et" type="button">
+<div id="mainCol">
+  <header>
+    <button class="icon-btn" id="historyBtn" aria-label="Tarixçə" title="Söhbət tarixçəsi">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        <path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 6h18M3 12h18M3 18h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
     </button>
-    <input type="file" id="fileInput" style="display:none">
-    <textarea id="input" rows="1" placeholder="Mesaj yaz..."></textarea>
-    <button class="send" id="sendBtn" aria-label="Göndər">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-        <path d="M4 12L20 4L13 20L11 13L4 12Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <div class="nova-mark" id="novaMark"></div>
+    <h1>Nova</h1>
+    <button class="icon-btn" id="newChatBtn" aria-label="Yeni söhbət" title="Yeni söhbət">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
     </button>
+    <button class="icon-btn" id="incognitoBtn" aria-label="Gizli söhbət" title="Gizli söhbət (yadda saxlanmır)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M17.94 17.94A10.94 10.94 0 0112 20c-7 0-10-8-10-8a18.6 18.6 0 015.06-5.94M9.9 4.24A10.94 10.94 0 0112 4c7 0 10 8 10 8a18.6 18.6 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24M1 1l22 22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </header>
+
+  <div class="topbar">
+    <span class="badge {{ 'plus' if plan == 'plus' else '' }}" id="planBadge">{{ 'Nova+' if plan == 'plus' else 'Free' }}</span>
+    <div class="topbar-right">
+      <a class="logout-link" href="/logout">Çıxış</a>
+    </div>
   </div>
-  <div id="fileNote" class="file-note"></div>
-</footer>
+
+  <main id="chat">
+    <div class="empty-state" id="emptyState">
+      <div class="big">Salam.</div>
+      <p>Nə barədə danışmaq istəyirsən? Nova sənin suallarına kömək etməyə hazırdır.</p>
+    </div>
+  </main>
+
+  <footer>
+    <div class="preview-strip" id="previewStrip">
+      <div class="preview-chip">
+        <img id="previewImg" src="" alt="">
+        <button class="preview-remove" id="previewRemove">✕</button>
+      </div>
+    </div>
+    <div class="input-wrap">
+      <button class="attach" id="attachBtn" aria-label="Fayl əlavə et" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <input type="file" id="fileInput" style="display:none">
+      <textarea id="input" rows="1" placeholder="Mesaj yaz..."></textarea>
+      <button class="send" id="sendBtn" aria-label="Göndər">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+          <path d="M4 12L20 4L13 20L11 13L4 12Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div id="fileNote" class="file-note"></div>
+  </footer>
+</div>
 
 <script>
 const chat = document.getElementById('chat');
 const input = document.getElementById('input');
 const sendBtn = document.getElementById('sendBtn');
-const emptyState = document.getElementById('emptyState');
+const sidebar = document.getElementById('sidebar');
+const historyBtn = document.getElementById('historyBtn');
+const newChatBtn = document.getElementById('newChatBtn');
+const incognitoBtn = document.getElementById('incognitoBtn');
+const novaMark = document.getElementById('novaMark');
+const planBadge = document.getElementById('planBadge');
+const convList = document.getElementById('convList');
+const attachBtn = document.getElementById('attachBtn');
+const fileInput = document.getElementById('fileInput');
+const fileNote = document.getElementById('fileNote');
+const previewStrip = document.getElementById('previewStrip');
+const previewImg = document.getElementById('previewImg');
+const previewRemove = document.getElementById('previewRemove');
+
+let conversationHistory = [];
+let currentConversationId = null;
+let incognitoMode = false;
+let pendingImage = null; // base64 data URL
+const basePlanLabel = planBadge.textContent;
+const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 
 input.addEventListener('input', () => {
   input.style.height = 'auto';
@@ -305,16 +424,182 @@ input.addEventListener('keydown', (e) => {
 });
 sendBtn.addEventListener('click', send);
 
-const attachBtn = document.getElementById('attachBtn');
-const fileInput = document.getElementById('fileInput');
-const fileNote = document.getElementById('fileNote');
+/* ---------- UI helpers ---------- */
+function clearChatArea() {
+  chat.innerHTML = '<div class="empty-state" id="emptyState"><div class="big">Salam.</div><p>Nə barədə danışmaq istəyirsən? Nova sənin suallarına kömək etməyə hazırdır.</p></div>';
+}
 
+function addMessage(role, text, imageUrl) {
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + (role === 'user' ? 'user' : 'nova');
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+
+  if (role === 'nova') {
+    const label = document.createElement('div');
+    label.className = 'nova-label';
+    label.textContent = 'Nova';
+    bubble.appendChild(label);
+  }
+  if (imageUrl) {
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.className = 'msg-image';
+    bubble.appendChild(img);
+  }
+  if (text) {
+    const content = document.createElement('div');
+    content.textContent = text;
+    bubble.appendChild(content);
+  }
+
+  wrap.appendChild(bubble);
+  chat.appendChild(wrap);
+  window.scrollTo(0, document.body.scrollHeight);
+  return wrap;
+}
+
+function addTyping() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg nova';
+  wrap.id = 'typingIndicator';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = '<div class="nova-label">Nova</div><div class="typing"><span></span><span></span><span></span></div>';
+  wrap.appendChild(bubble);
+  chat.appendChild(wrap);
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+function removeTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
+
+/* ---------- Incognito toggle ---------- */
+incognitoBtn.addEventListener('click', () => {
+  incognitoMode = !incognitoMode;
+  incognitoBtn.classList.toggle('active', incognitoMode);
+  novaMark.classList.toggle('incognito-on', incognitoMode);
+  if (incognitoMode) {
+    planBadge.textContent = 'Gizli söhbət';
+    planBadge.classList.add('incognito');
+    startNewChat(false);
+  } else {
+    planBadge.textContent = basePlanLabel;
+    planBadge.classList.remove('incognito');
+    startNewChat(false);
+  }
+});
+
+/* ---------- New chat ---------- */
+newChatBtn.addEventListener('click', () => startNewChat(true));
+
+function startNewChat(clearIncognito) {
+  currentConversationId = null;
+  conversationHistory = [];
+  clearChatArea();
+  clearPreview();
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+  if (clearIncognito && incognitoMode) {
+    incognitoMode = false;
+    incognitoBtn.classList.remove('active');
+    novaMark.classList.remove('incognito-on');
+    planBadge.textContent = basePlanLabel;
+    planBadge.classList.remove('incognito');
+  }
+}
+
+/* ---------- Sidebar / history ---------- */
+historyBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  if (sidebar.classList.contains('open')) loadConversations();
+});
+
+async function loadConversations() {
+  try {
+    const res = await fetch('/api/conversations');
+    const convs = await res.json();
+    renderConversations(convs);
+  } catch (err) {
+    convList.innerHTML = '<div class="conv-empty">Yüklənmədi.</div>';
+  }
+}
+
+function renderConversations(convs) {
+  if (!convs.length) {
+    convList.innerHTML = '<div class="conv-empty">Hələ söhbət yoxdur.</div>';
+    return;
+  }
+  convList.innerHTML = '';
+  convs.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (c.id === currentConversationId ? ' active' : '');
+    item.innerHTML = `<span class="conv-title">${escapeHtml(c.title)}</span>
+      <button class="conv-delete" title="Sil">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6h16z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>`;
+    item.querySelector('.conv-title').addEventListener('click', () => openConversation(c.id));
+    item.querySelector('.conv-delete').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteConversation(c.id);
+    });
+    convList.appendChild(item);
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function openConversation(id) {
+  try {
+    const res = await fetch(`/api/conversations/${id}/messages`);
+    const msgs = await res.json();
+    currentConversationId = id;
+    conversationHistory = msgs.map(m => ({role: m.role, content: m.content}));
+    clearChatArea();
+    msgs.forEach(m => addMessage(m.role === 'user' ? 'user' : 'nova', m.content));
+    document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    loadConversations();
+  } catch (err) {}
+}
+
+async function deleteConversation(id) {
+  try {
+    await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+    if (id === currentConversationId) startNewChat(false);
+    loadConversations();
+  } catch (err) {}
+}
+
+/* ---------- File / image attach ---------- */
 attachBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files[0];
   if (!file) return;
 
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  const isImage = IMAGE_EXT.includes(ext) || file.type.startsWith('image/');
+
+  if (isImage) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      pendingImage = reader.result;
+      previewImg.src = pendingImage;
+      previewStrip.classList.add('show');
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+    return;
+  }
+
+  // Sekil deyilse - koḣne validasiya axinina get
   fileNote.textContent = file.name + ' yüklənir...';
   fileNote.className = 'file-note';
 
@@ -340,70 +625,52 @@ fileInput.addEventListener('change', async () => {
   setTimeout(() => { fileNote.textContent = ''; }, 6000);
 });
 
-function addMessage(role, text) {
-  if (emptyState) emptyState.remove();
-  const wrap = document.createElement('div');
-  wrap.className = 'msg ' + (role === 'user' ? 'user' : 'nova');
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  if (role === 'nova') {
-    const label = document.createElement('div');
-    label.className = 'nova-label';
-    label.textContent = 'Nova';
-    bubble.appendChild(label);
-    const content = document.createElement('div');
-    content.textContent = text;
-    bubble.appendChild(content);
-  } else {
-    bubble.textContent = text;
-  }
-  wrap.appendChild(bubble);
-  chat.appendChild(wrap);
-  window.scrollTo(0, document.body.scrollHeight);
-  return wrap;
+previewRemove.addEventListener('click', clearPreview);
+
+function clearPreview() {
+  pendingImage = null;
+  previewImg.src = '';
+  previewStrip.classList.remove('show');
 }
 
-function addTyping() {
-  const wrap = document.createElement('div');
-  wrap.className = 'msg nova';
-  wrap.id = 'typingIndicator';
-  const bubble = document.createElement('div');
-  bubble.className = 'bubble';
-  bubble.innerHTML = '<div class="nova-label">Nova</div><div class="typing"><span></span><span></span><span></span></div>';
-  wrap.appendChild(bubble);
-  chat.appendChild(wrap);
-  window.scrollTo(0, document.body.scrollHeight);
-}
-
-function removeTyping() {
-  const el = document.getElementById('typingIndicator');
-  if (el) el.remove();
-}
-
-let conversationHistory = [];
-
+/* ---------- Send message ---------- */
 async function send() {
   const text = input.value.trim();
-  if (!text) return;
+  const imageToSend = pendingImage;
+  if (!text && !imageToSend) return;
 
-  addMessage('user', text);
+  addMessage('user', text, imageToSend);
   input.value = '';
   input.style.height = 'auto';
+  clearPreview();
   sendBtn.disabled = true;
   addTyping();
 
   try {
+    if (!incognitoMode && !currentConversationId) {
+      const convRes = await fetch('/api/conversations', { method: 'POST' });
+      const convData = await convRes.json();
+      currentConversationId = convData.id;
+    }
+
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message: text, history: conversationHistory})
+      body: JSON.stringify({
+        message: text,
+        image: imageToSend,
+        history: conversationHistory,
+        conversation_id: incognitoMode ? null : currentConversationId,
+        incognito: incognitoMode
+      })
     });
     const data = await res.json();
     removeTyping();
     if (data.reply) {
       addMessage('nova', data.reply);
-      conversationHistory.push({role: 'user', content: text});
+      conversationHistory.push({role: 'user', content: text || '[şəkil göndərildi]'});
       conversationHistory.push({role: 'assistant', content: data.reply});
+      if (sidebar.classList.contains('open')) loadConversations();
     } else if (data.error === 'limit') {
       addMessage('nova', data.message);
     } else {
