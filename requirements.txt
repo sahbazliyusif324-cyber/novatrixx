@@ -4,3 +4,4 @@ flask-login
 groq
 gunicorn
 requests
+PyPDF2
