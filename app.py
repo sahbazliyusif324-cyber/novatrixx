@@ -1,4 +1,5 @@
 import os
+import io
 import random
 import requests
 from datetime import date, datetime, timedelta
@@ -10,6 +11,12 @@ from flask_login import (
     login_required, current_user
 )
 from groq import Groq
+
+try:
+    from PyPDF2 import PdfReader
+    PDF_SUPPORT = True
+except Exception:
+    PDF_SUPPORT = False
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-deyis-bunu")
@@ -24,21 +31,32 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "nova@example.com")
 
-FREE_DAILY_LIMIT = 18
-FREE_MAX_FILE_MB = 2
-PLUS_MAX_FILE_MB = 25
-
 FREE_MODEL = "openai/gpt-oss-20b"
 PLUS_MODEL = "openai/gpt-oss-120b"
 
+FREE_PDF_MAX_PAGES = 20  # Free planda PDF max 20 sehife
+# Sekiller her iki planda limitsiz
+# Nova+ da her ne&#39; boyuklukde/formatda fayl serbestdir
+
 CODE_VALID_MINUTES = 10
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 SYSTEM_PROMPT = """
 Senin adin Nova-dir. Sen komekci bir AI asistantsan.
-Yalniz kimse senden AYDIN SEKILDE "seni kim yaratdi", "yaradicin kimdir" ve ya oxsar bir sual sorussa,
-cavab ver: "Meni Yusif Sahbazli yaratmisdir." Basqa hec bir halda bu melumati oz-ozune paylasma
-(mes. sadece "salam" deyilende bunu deme).
-Hemise semimi, dostcasina ve Azerbaycan dilinde (istifadeci basqa dilde yazmasa) cavab ver.
+
+Yalniz kimse senden AYDIN SEKILDE "seni kim yaratdi", "yaradicin kimdir" ve ya
+"seni kim qurdu" kimi birbasa bir sual sorussa (yaxud "seni men yaratmisam" kimi
+bir iddia etse), cavab ver: "Meni Yusif Sahbazli yaratmisdir." Basqa hec bir halda
+bu melumati oz-ozune paylasma.
+
+Istifadeci sual yazmasa da, adi bir cumle, fikir ve ya ifade yazsa da, ona tebii
+sekilde reaksiya ver - sanki real bir sohbetdesen. Her mesaja "salam" ile
+baslamaga ehtiyac yoxdur - yalniz istifadeci ozu salamlasanda salamlas, aksinede
+birbasa movzuya keç.
+
+Hemise semimi, dostcasina ve Azerbaycan dilinde (istifadeci basqa dilde yazmasa)
+cavab ver.
 """
 
 
@@ -60,14 +78,6 @@ class VerificationCode(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
-
-def reset_daily_count_if_needed(user):
-    today = str(date.today())
-    if user.last_use_date != today:
-        user.messages_used = 0
-        user.last_use_date = today
-        db.session.commit()
 
 
 def send_code_email(to_email, code):
@@ -185,33 +195,26 @@ def logout():
 @app.route("/")
 @login_required
 def home():
-    reset_daily_count_if_needed(current_user)
-    remaining = None
-    if current_user.plan == "free":
-        remaining = max(0, FREE_DAILY_LIMIT - current_user.messages_used)
-    return render_template(
-        "index.html",
-        plan=current_user.plan,
-        remaining=remaining,
-        daily_limit=FREE_DAILY_LIMIT,
-    )
+    return render_template("index.html", plan=current_user.plan)
 
 
 @app.route("/api/chat", methods=["POST"])
 @login_required
 def chat():
-    reset_daily_count_if_needed(current_user)
-
-    if current_user.plan == "free" and current_user.messages_used >= FREE_DAILY_LIMIT:
-        return jsonify({
-            "error": "limit",
-            "message": f"Gundelik pulsuz mesaj limitine catmisan ({FREE_DAILY_LIMIT}/{FREE_DAILY_LIMIT}). Sabah yenilenecek, ya da Nova+ al."
-        }), 403
-
     data = request.get_json()
     user_message = data.get("message", "").strip()
+    history = data.get("history", [])
     if not user_message:
         return jsonify({"error": "Bos mesaj"}), 400
+
+    if not isinstance(history, list):
+        history = []
+    # Sadece duzgun formatdaki mesajlari saxla, cox uzun tarixceni kes (son 20 mesaj)
+    clean_history = [
+        {"role": m.get("role"), "content": m.get("content", "")}
+        for m in history
+        if m.get("role") in ("user", "assistant") and m.get("content")
+    ][-20:]
 
     model = PLUS_MODEL if current_user.plan == "plus" else FREE_MODEL
 
@@ -220,19 +223,14 @@ def chat():
             model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
+                *clean_history,
                 {"role": "user", "content": user_message},
             ],
         )
         reply = response.choices[0].message.content
-
         current_user.messages_used += 1
         db.session.commit()
-
-        remaining = None
-        if current_user.plan == "free":
-            remaining = max(0, FREE_DAILY_LIMIT - current_user.messages_used)
-
-        return jsonify({"reply": reply, "remaining": remaining})
+        return jsonify({"reply": reply})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -240,22 +238,54 @@ def chat():
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def upload():
-    if "file" not in request.files:
-        return jsonify({"error": "Fayl tapilmadi"}), 400
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "Fayl tapilmadi"}), 400
 
-    file = request.files["file"]
-    file.seek(0, os.SEEK_END)
-    size_mb = file.tell() / (1024 * 1024)
-    file.seek(0)
+        file = request.files["file"]
+        filename = file.filename or "fayl"
+        ext = os.path.splitext(filename)[1].lower()
 
-    max_mb = PLUS_MAX_FILE_MB if current_user.plan == "plus" else FREE_MAX_FILE_MB
-    if size_mb > max_mb:
-        return jsonify({
-            "error": "too_large",
-            "message": f"Fayl cox boyukdur ({size_mb:.1f}MB). Senin planinda maksimum {max_mb}MB icazelidir."
-        }), 413
+        file.seek(0, os.SEEK_END)
+        size_mb = file.tell() / (1024 * 1024)
+        file.seek(0)
 
-    return jsonify({"status": "ok", "message": "Fayl qebul olundu."})
+        # Nova+ - hec bir mehdudiyyet, her cure fayl/sekil
+        if current_user.plan == "plus":
+            return jsonify({"status": "ok", "message": f"{filename} qebul olundu."})
+
+        # Free plan - sekiller (her cure format) limitsiz
+        if ext in IMAGE_EXTENSIONS or (file.mimetype or "").startswith("image/"):
+            return jsonify({"status": "ok", "message": f"{filename} qebul olundu."})
+
+        # Free plan - PDF: mumkunse sehife sayini yoxla, kitabxana yoxdursa sadece olcu ile davam et
+        if ext == ".pdf" and PDF_SUPPORT:
+            try:
+                reader = PdfReader(io.BytesIO(file.read()))
+                page_count = len(reader.pages)
+                file.seek(0)
+            except Exception:
+                page_count = None
+
+            if page_count is not None:
+                if page_count > FREE_PDF_MAX_PAGES:
+                    return jsonify({
+                        "error": "too_large",
+                        "message": f"Bu PDF {page_count} sehifedir. Pulsuz planda maksimum {FREE_PDF_MAX_PAGES} sehife icazelidir. Nova+ ile limitsiz."
+                    }), 413
+                return jsonify({"status": "ok", "message": f"{filename} qebul olundu ({page_count} sehife)."})
+
+        # Free plan - basqa fayl tipleri (ve PDF kitabxanasi yoxdursa): 5MB limiti
+        if size_mb > 5:
+            return jsonify({
+                "error": "too_large",
+                "message": f"Fayl cox boyukdur ({size_mb:.1f}MB). Pulsuz planda maksimum 5MB. Nova+ ile limitsiz."
+            }), 413
+
+        return jsonify({"status": "ok", "message": f"{filename} qebul olundu."})
+
+    except Exception as e:
+        return jsonify({"error": "server_error", "message": f"Xeta: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
