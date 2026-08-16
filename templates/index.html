@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nova</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -210,6 +210,41 @@
 
   ::-webkit-scrollbar{ width:8px; }
   ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:8px; }
+
+  .attach{
+    flex-shrink:0; width:36px; height:36px; border-radius:10px;
+    border:none; background:transparent; color:var(--muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:color .15s, background .15s;
+  }
+  .attach:hover{ color:var(--accent); background:var(--accent-soft); }
+  .file-note{
+    max-width:760px; margin:8px auto 0; padding:0 6px;
+    font-size:12.5px; color:var(--muted); text-align:center; min-height:16px;
+  }
+  .file-note.error{ color:#e0a3a3; }
+  .file-note.ok{ color:var(--accent); }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    max-width:760px; margin:0 auto; padding:0 20px;
+  }
+  .badge{
+    font-size:12px; padding:5px 11px; border-radius:20px;
+    border:1px solid var(--border); color:var(--muted);
+  }
+  .badge.plus{ color:var(--accent); border-color:var(--accent); }
+  .topbar-right{ display:flex; align-items:center; gap:10px; }
+  .logout-link{
+    font-size:13px; color:var(--muted); text-decoration:none; border:1px solid var(--border);
+    padding:6px 12px; border-radius:20px; transition:color .15s, border-color .15s;
+  }
+  .logout-link:hover{ color:var(--text); border-color:var(--accent); }
+  .limit-banner{
+    max-width:760px; margin:14px auto 0; padding:12px 16px;
+    background:rgba(203,163,107,0.08); border:1px solid var(--accent-soft);
+    border-radius:12px; font-size:13px; color:var(--muted); text-align:center;
+  }
 </style>
 </head>
 <body>
@@ -218,6 +253,13 @@
   <div class="nova-mark"></div>
   <h1>Nova</h1>
 </header>
+
+<div class="topbar">
+  <span class="badge {{ 'plus' if plan == 'plus' else '' }}">{{ 'Nova+' if plan == 'plus' else 'Free' }}</span>
+  <div class="topbar-right">
+    <a class="logout-link" href="/logout">Çıxış</a>
+  </div>
+</div>
 
 <main id="chat">
   <div class="empty-state" id="emptyState">
@@ -228,6 +270,12 @@
 
 <footer>
   <div class="input-wrap">
+    <button class="attach" id="attachBtn" aria-label="Fayl əlavə et" type="button">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <input type="file" id="fileInput" style="display:none">
     <textarea id="input" rows="1" placeholder="Mesaj yaz..."></textarea>
     <button class="send" id="sendBtn" aria-label="Göndər">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
@@ -235,6 +283,7 @@
       </svg>
     </button>
   </div>
+  <div id="fileNote" class="file-note"></div>
 </footer>
 
 <script>
@@ -255,6 +304,41 @@ input.addEventListener('keydown', (e) => {
   }
 });
 sendBtn.addEventListener('click', send);
+
+const attachBtn = document.getElementById('attachBtn');
+const fileInput = document.getElementById('fileInput');
+const fileNote = document.getElementById('fileNote');
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  fileNote.textContent = file.name + ' yüklənir...';
+  fileNote.className = 'file-note';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      fileNote.textContent = data.message;
+      fileNote.className = 'file-note ok';
+    } else {
+      fileNote.textContent = data.message || 'Fayl qəbul olunmadı.';
+      fileNote.className = 'file-note error';
+    }
+  } catch (err) {
+    fileNote.textContent = 'Fayl yüklənərkən xəta baş verdi.';
+    fileNote.className = 'file-note error';
+  }
+
+  fileInput.value = '';
+  setTimeout(() => { fileNote.textContent = ''; }, 6000);
+});
 
 function addMessage(role, text) {
   if (emptyState) emptyState.remove();
@@ -296,6 +380,8 @@ function removeTyping() {
   if (el) el.remove();
 }
 
+let conversationHistory = [];
+
 async function send() {
   const text = input.value.trim();
   if (!text) return;
@@ -310,12 +396,16 @@ async function send() {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({message: text})
+      body: JSON.stringify({message: text, history: conversationHistory})
     });
     const data = await res.json();
     removeTyping();
     if (data.reply) {
       addMessage('nova', data.reply);
+      conversationHistory.push({role: 'user', content: text});
+      conversationHistory.push({role: 'assistant', content: data.reply});
+    } else if (data.error === 'limit') {
+      addMessage('nova', data.message);
     } else {
       addMessage('nova', 'Xəta baş verdi: ' + (data.error || 'naməlum xəta'));
     }
