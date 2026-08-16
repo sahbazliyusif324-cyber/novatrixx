@@ -33,10 +33,9 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "nova@example.com")
 
 FREE_MODEL = "openai/gpt-oss-20b"
 PLUS_MODEL = "openai/gpt-oss-120b"
+VISION_MODEL = "qwen/qwen3.6-27b"  # sekilleri "gore" bilen model
 
-FREE_PDF_MAX_PAGES = 20  # Free planda PDF max 20 sehife
-# Sekiller her iki planda limitsiz
-# Nova+ da her ne&#39; boyuklukde/formatda fayl serbestdir
+FREE_PDF_MAX_PAGES = 20  # Free planda PDF max 20 sehife, Nova+ da limitsiz
 
 CODE_VALID_MINUTES = 10
 
@@ -75,6 +74,21 @@ class VerificationCode(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class Conversation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(120), default="Yeni söhbət")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id"), nullable=False)
+    role = db.Column(db.String(10), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -102,6 +116,7 @@ def send_code_email(to_email, code):
         raise Exception(f"Brevo error: {response.status_code} {response.text}")
 
 
+# ---------------- Giris (email + kod) ----------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -198,43 +213,126 @@ def home():
     return render_template("index.html", plan=current_user.plan)
 
 
+# ---------------- Sohbetler (conversations) ----------------
+@app.route("/api/conversations", methods=["GET"])
+@login_required
+def list_conversations():
+    convs = (
+        Conversation.query
+        .filter_by(user_id=current_user.id)
+        .order_by(Conversation.created_at.desc())
+        .all()
+    )
+    return jsonify([
+        {"id": c.id, "title": c.title, "created_at": c.created_at.isoformat()}
+        for c in convs
+    ])
+
+
+@app.route("/api/conversations", methods=["POST"])
+@login_required
+def create_conversation():
+    conv = Conversation(user_id=current_user.id, title="Yeni söhbət")
+    db.session.add(conv)
+    db.session.commit()
+    return jsonify({"id": conv.id, "title": conv.title})
+
+
+@app.route("/api/conversations/<int:conv_id>/messages", methods=["GET"])
+@login_required
+def get_conversation_messages(conv_id):
+    conv = Conversation.query.filter_by(id=conv_id, user_id=current_user.id).first()
+    if not conv:
+        return jsonify({"error": "Tapılmadı"}), 404
+
+    msgs = (
+        ChatMessage.query
+        .filter_by(conversation_id=conv.id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    return jsonify([{"role": m.role, "content": m.content} for m in msgs])
+
+
+@app.route("/api/conversations/<int:conv_id>", methods=["DELETE"])
+@login_required
+def delete_conversation(conv_id):
+    conv = Conversation.query.filter_by(id=conv_id, user_id=current_user.id).first()
+    if not conv:
+        return jsonify({"error": "Tapılmadı"}), 404
+
+    ChatMessage.query.filter_by(conversation_id=conv.id).delete()
+    db.session.delete(conv)
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+# ---------------- Chat API ----------------
 @app.route("/api/chat", methods=["POST"])
 @login_required
 def chat():
     data = request.get_json()
-    user_message = data.get("message", "").strip()
+    user_message = (data.get("message") or "").strip()
     history = data.get("history", [])
-    if not user_message:
+    conversation_id = data.get("conversation_id")
+    incognito = bool(data.get("incognito"))
+    image_data_url = data.get("image")  # "data:image/png;base64,...."
+
+    if not user_message and not image_data_url:
         return jsonify({"error": "Bos mesaj"}), 400
 
     if not isinstance(history, list):
         history = []
-    # Sadece duzgun formatdaki mesajlari saxla, cox uzun tarixceni kes (son 20 mesaj)
     clean_history = [
         {"role": m.get("role"), "content": m.get("content", "")}
         for m in history
         if m.get("role") in ("user", "assistant") and m.get("content")
     ][-20:]
 
-    model = PLUS_MODEL if current_user.plan == "plus" else FREE_MODEL
-
     try:
+        if image_data_url:
+            # Sekil gonderilib - vision modeli istifade et
+            model = VISION_MODEL
+            user_content = [
+                {"type": "text", "text": user_message or "Bu şəkildə nə var, izah et."},
+                {"type": "image_url", "image_url": {"url": image_data_url}},
+            ]
+        else:
+            model = PLUS_MODEL if current_user.plan == "plus" else FREE_MODEL
+            user_content = user_message
+
         response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 *clean_history,
-                {"role": "user", "content": user_message},
+                {"role": "user", "content": user_content},
             ],
         )
         reply = response.choices[0].message.content
         current_user.messages_used += 1
+
+        # Tarixce ucun saxlanacaq metn (sekil olsa qeyd elave edirik)
+        saved_user_text = user_message
+        if image_data_url:
+            saved_user_text = (user_message + " [şəkil göndərildi]").strip()
+
+        if not incognito and conversation_id:
+            conv = Conversation.query.filter_by(id=conversation_id, user_id=current_user.id).first()
+            if conv:
+                db.session.add(ChatMessage(conversation_id=conv.id, role="user", content=saved_user_text))
+                db.session.add(ChatMessage(conversation_id=conv.id, role="assistant", content=reply))
+                if conv.title == "Yeni söhbət":
+                    base_title = saved_user_text or "Şəkil"
+                    conv.title = base_title[:40] + ("…" if len(base_title) > 40 else "")
+
         db.session.commit()
         return jsonify({"reply": reply})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+# ---------------- Fayl yukleme (PDF / basqa novler) ----------------
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def upload():
@@ -250,15 +348,12 @@ def upload():
         size_mb = file.tell() / (1024 * 1024)
         file.seek(0)
 
-        # Nova+ - hec bir mehdudiyyet, her cure fayl/sekil
         if current_user.plan == "plus":
             return jsonify({"status": "ok", "message": f"{filename} qebul olundu."})
 
-        # Free plan - sekiller (her cure format) limitsiz
         if ext in IMAGE_EXTENSIONS or (file.mimetype or "").startswith("image/"):
             return jsonify({"status": "ok", "message": f"{filename} qebul olundu."})
 
-        # Free plan - PDF: mumkunse sehife sayini yoxla, kitabxana yoxdursa sadece olcu ile davam et
         if ext == ".pdf" and PDF_SUPPORT:
             try:
                 reader = PdfReader(io.BytesIO(file.read()))
@@ -275,7 +370,6 @@ def upload():
                     }), 413
                 return jsonify({"status": "ok", "message": f"{filename} qebul olundu ({page_count} sehife)."})
 
-        # Free plan - basqa fayl tipleri (ve PDF kitabxanasi yoxdursa): 5MB limiti
         if size_mb > 5:
             return jsonify({
                 "error": "too_large",
