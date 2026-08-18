@@ -30,6 +30,7 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "nova@example.com")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "sahbazliyusif324@gmail.com")
 
 FREE_MODEL = "openai/gpt-oss-20b"
 PLUS_MODEL = "openai/gpt-oss-120b"
@@ -53,6 +54,12 @@ Istifadeci sual yazmasa da, adi bir cumle, fikir ve ya ifade yazsa da, ona tebii
 sekilde reaksiya ver - sanki real bir sohbetdesen. Her mesaja "salam" ile
 baslamaga ehtiyac yoxdur - yalniz istifadeci ozu salamlasanda salamlas, aksinede
 birbasa movzuya keç.
+
+Sen sekil yarada bilmirsen ozun - eger kimse sekil isteyirse ve bu mesaja
+sekil elave olunmayibsa, "sekil yarada bilmirem" demek yerine sadece normal
+davran, cunki sistem avtomatik sekil yaratma sorgusunu ayrica idare edir.
+HEC VAXT ozunden uydurma sekil linki ("https://..." kimi movcud olmayan
+URL-ler) yaratma ve markdown sekil sintaksisi ![...](...) istifade etme.
 
 Hemise semimi, dostcasina ve Azerbaycan dilinde (istifadeci basqa dilde yazmasa)
 cavab ver.
@@ -116,6 +123,28 @@ def send_code_email(to_email, code):
         raise Exception(f"Brevo error: {response.status_code} {response.text}")
 
 
+def send_admin_login_notice(user_email, is_new_user):
+    if not BREVO_API_KEY or not ADMIN_EMAIL:
+        return
+    try:
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+        }
+        status_text = "Yeni istifadəçi qeydiyyatdan keçdi" if is_new_user else "İstifadəçi daxil oldu"
+        payload = {
+            "sender": {"name": "Nova", "email": SENDER_EMAIL},
+            "to": [{"email": ADMIN_EMAIL}],
+            "subject": f"Nova: {status_text} — {user_email}",
+            "htmlContent": f"<p>{status_text}:</p><p><b>{user_email}</b></p><p>{datetime.utcnow().isoformat()} UTC</p>",
+        }
+        requests.post(url, json=payload, headers=headers, timeout=10)
+    except Exception:
+        pass  # bildiris gonderilmese de giris prosesi pozulmasin
+
+
 # ---------------- Giris (email + kod) ----------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -166,16 +195,19 @@ def verify():
             return redirect(url_for("login"))
 
         user = User.query.filter_by(email=email).first()
+        is_new_user = False
         if not user:
             user = User(email=email, plan="free", messages_used=0, last_use_date=str(date.today()))
             db.session.add(user)
             db.session.commit()
+            is_new_user = True
 
         VerificationCode.query.filter_by(email=email).delete()
         db.session.commit()
 
         session.pop("pending_email", None)
         login_user(user)
+        send_admin_login_notice(email, is_new_user)
         return redirect(url_for("home"))
 
     return render_template("verify.html", email=email)
