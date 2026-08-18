@@ -414,16 +414,12 @@ let pendingImage = null; // base64 data URL
 const basePlanLabel = planBadge.textContent;
 const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 
-const IMAGE_GEN_PATTERNS = [
-  /şəkil (çək|yarat|hazırla)/i,
-  /(bir )?şəkil (ver|göstər|düzəlt)/i,
-  /generate (an )?image/i,
-  /draw (me|a|an)/i,
-  /create (an )?image/i,
-];
-
 function isImageGenRequest(text) {
-  return IMAGE_GEN_PATTERNS.some(p => p.test(text));
+  const t = text.toLowerCase();
+  const hasSekilWord = /şəkil|sekil|şekil/.test(t);
+  const hasVerb = /yarat|çək|cek|hazırla|hazirla|düzəlt|duzelt|göstər|goster|ver\b|draw|generate|create/.test(t);
+  const englishImage = /(generate|create|draw) (an? )?image/.test(t);
+  return (hasSekilWord && hasVerb) || englishImage;
 }
 
 input.addEventListener('input', () => {
