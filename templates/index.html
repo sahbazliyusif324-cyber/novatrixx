@@ -414,6 +414,18 @@ let pendingImage = null; // base64 data URL
 const basePlanLabel = planBadge.textContent;
 const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 
+const IMAGE_GEN_PATTERNS = [
+  /şəkil (çək|yarat|hazırla)/i,
+  /(bir )?şəkil (ver|göstər|düzəlt)/i,
+  /generate (an )?image/i,
+  /draw (me|a|an)/i,
+  /create (an )?image/i,
+];
+
+function isImageGenRequest(text) {
+  return IMAGE_GEN_PATTERNS.some(p => p.test(text));
+}
+
 input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 140) + 'px';
@@ -566,7 +578,13 @@ async function openConversation(id) {
     currentConversationId = id;
     conversationHistory = msgs.map(m => ({role: m.role, content: m.content}));
     clearChatArea();
-    msgs.forEach(m => addMessage(m.role === 'user' ? 'user' : 'nova', m.content));
+    msgs.forEach(m => {
+      if (m.content && m.content.startsWith('IMAGE_URL:')) {
+        addMessage(m.role === 'user' ? 'user' : 'nova', null, m.content.slice(10));
+      } else {
+        addMessage(m.role === 'user' ? 'user' : 'nova', m.content);
+      }
+    });
     document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
     loadConversations();
   } catch (err) {}
@@ -654,6 +672,31 @@ async function send() {
       const convRes = await fetch('/api/conversations', { method: 'POST' });
       const convData = await convRes.json();
       currentConversationId = convData.id;
+    }
+
+    // Sekil yaratma istegi (ve tehlil ucun sekil elave olunmayibsa)
+    if (!imageToSend && isImageGenRequest(text)) {
+      const genRes = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          prompt: text,
+          conversation_id: incognitoMode ? null : currentConversationId,
+          incognito: incognitoMode
+        })
+      });
+      const genData = await genRes.json();
+      removeTyping();
+      if (genData.image_url) {
+        addMessage('nova', null, genData.image_url);
+        conversationHistory.push({role: 'user', content: text});
+        conversationHistory.push({role: 'assistant', content: '[şəkil yaradıldı]'});
+        if (sidebar.classList.contains('open')) loadConversations();
+      } else {
+        addMessage('nova', 'Şəkil yaradıla bilmədi.');
+      }
+      sendBtn.disabled = false;
+      return;
     }
 
     const res = await fetch('/api/chat', {
