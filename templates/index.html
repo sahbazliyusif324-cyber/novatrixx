@@ -416,7 +416,8 @@ const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
 
 function isImageGenRequest(text) {
   const t = text.toLowerCase();
-  const hasSekilWord = /şəkil|sekil|şekil/.test(t);
+  // "şəkil" sozu şekilçi alanda "şəkli", "şəklini" kimi formalara dusur (herf dusumu) - buna gore geniş qelib
+  const hasSekilWord = /şək(i)?l|sek(i)?l|şek(i)?l/.test(t);
   const hasVerb = /yarat|çək|cek|hazırla|hazirla|düzəlt|duzelt|göstər|goster|ver\b|draw|generate|create/.test(t);
   const englishImage = /(generate|create|draw) (an? )?image/.test(t);
   return (hasSekilWord && hasVerb) || englishImage;
