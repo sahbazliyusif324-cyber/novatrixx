@@ -333,6 +333,32 @@ def chat():
 
 
 # ---------------- Fayl yukleme (PDF / basqa novler) ----------------
+@app.route("/api/generate-image", methods=["POST"])
+@login_required
+def generate_image():
+    data = request.get_json()
+    prompt = (data.get("prompt") or "").strip()
+    conversation_id = data.get("conversation_id")
+    incognito = bool(data.get("incognito"))
+
+    if not prompt:
+        return jsonify({"error": "Bos prompt"}), 400
+
+    encoded_prompt = requests.utils.quote(prompt)
+    image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+
+    if not incognito and conversation_id:
+        conv = Conversation.query.filter_by(id=conversation_id, user_id=current_user.id).first()
+        if conv:
+            db.session.add(ChatMessage(conversation_id=conv.id, role="user", content=prompt))
+            db.session.add(ChatMessage(conversation_id=conv.id, role="assistant", content="IMAGE_URL:" + image_url))
+            if conv.title == "Yeni söhbət":
+                conv.title = prompt[:40] + ("…" if len(prompt) > 40 else "")
+            db.session.commit()
+
+    return jsonify({"image_url": image_url})
+
+
 @app.route("/api/upload", methods=["POST"])
 @login_required
 def upload():
